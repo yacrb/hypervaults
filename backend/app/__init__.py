@@ -1,0 +1,1 @@
+"""HyperVaults FastAPI application package."""
