@@ -17,7 +17,23 @@ The config adds:
 - `Referrer-Policy: no-referrer`
 - restrictive `Permissions-Policy`
 
-It also blocks `TRACE` and returns `404` for `/api/docs`, `/api/redoc`, and `/api/openapi.json`.
+The default config also blocks `TRACE` and returns `404` for `/api/docs`, `/api/redoc`, and `/api/openapi.json`.
+
+## Configs
+
+- `nginx.conf`: secure default used by `.env.example`.
+- `nginx.conf.secure`: explicit secure copy for comparison.
+- `nginx.conf.challenge`: first challenge config.
+
+To run the first challenge, set:
+
+```env
+NGINX_CONFIG_FILE=./nginx/nginx.conf.challenge
+CHALLENGE_MODE=true
+ENABLE_X_FORWARDED_DOCS_BYPASS=true
+```
+
+`nginx.conf.challenge` intentionally forwards the client-provided `X-Forwarded-For` header only for the docs endpoints. This is unsafe by design for the challenge. Regular API routes and MinIO download proxying remain scoped to their existing behavior.
 
 ## MinIO
 

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import Base, engine
+from app.docs import openapi_description, register_docs_routes
 from app.routes import auth, files, health
 from app.storage import ensure_bucket_exists
 
@@ -24,6 +25,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="HyperVaults API",
+    description=openapi_description(),
     version="0.1.0",
     docs_url=None,
     redoc_url=None,
@@ -42,3 +44,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(files.router)
+register_docs_routes(app)

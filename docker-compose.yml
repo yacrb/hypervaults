@@ -9,7 +9,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${NGINX_CONFIG_FILE:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 15s
@@ -51,6 +51,8 @@ services:
       MINIO_PRESIGNED_PUBLIC_BASE_URL: ${MINIO_PRESIGNED_PUBLIC_BASE_URL:?Set MINIO_PRESIGNED_PUBLIC_BASE_URL in .env}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:?Set TURNSTILE_SECRET_KEY in .env}
       TURNSTILE_DEV_BYPASS: ${TURNSTILE_DEV_BYPASS:?Set TURNSTILE_DEV_BYPASS in .env}
+      CHALLENGE_MODE: ${CHALLENGE_MODE:-false}
+      ENABLE_X_FORWARDED_DOCS_BYPASS: ${ENABLE_X_FORWARDED_DOCS_BYPASS:-false}
     depends_on:
       postgres:
         condition: service_healthy

@@ -30,7 +30,7 @@ http {
             return 405;
         }
 
-        # Keep FastAPI's interactive documentation unreachable through the public proxy.
+        # Secure baseline: documentation is not publicly routed through Nginx.
         location = /api/docs {
             return 404;
         }
@@ -43,7 +43,7 @@ http {
             return 404;
         }
 
-        # All application API calls go to FastAPI with the original /api path preserved.
+        # All application API calls go to FastAPI with proxy headers set by Nginx.
         location /api/ {
             proxy_pass http://backend_app;
             proxy_http_version 1.1;

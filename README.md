@@ -2,7 +2,7 @@
 
 HyperVaults is a local development baseline for a modern secure document vault. Users can create an account, log in, upload approved private files, list only their own files, download only their own files, and delete only their own files.
 
-This repository is the secure foundation. The intentionally vulnerable CTF branches are planned but are not implemented here.
+The default configuration remains secure. The first intentional challenge, an opt-in `X-Forwarded-For` docs bypass, is available only when its challenge flags and Nginx config are enabled.
 
 ## Architecture
 
@@ -15,7 +15,8 @@ Nginx :80
   |-- /api/       -> FastAPI backend :8000
   |-- /minio/     -> MinIO API :9000 for presigned GET/HEAD downloads only
   |
-  |-- blocks /api/docs, /api/redoc, /api/openapi.json
+  |-- blocks /api/docs, /api/redoc, /api/openapi.json by default
+  |-- can opt into a challenge config for the X-Forwarded-For docs bypass
   |-- does not proxy MinIO console
 
 FastAPI
@@ -51,6 +52,14 @@ Then open:
 The default `.env.example` uses Cloudflare Turnstile official dummy keys that always pass local validation. For real Turnstile credentials, replace both `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`.
 
 Cloudflare test key reference: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+
+By default, `.env.example` also selects the secure Nginx config:
+
+```env
+NGINX_CONFIG_FILE=./nginx/nginx.conf
+CHALLENGE_MODE=false
+ENABLE_X_FORWARDED_DOCS_BYPASS=false
+```
 
 ## Turnstile
 
@@ -157,7 +166,7 @@ On Windows PowerShell, use `curl.exe` if `curl` is aliased to `Invoke-WebRequest
 - No public MinIO bucket.
 - No leaked MinIO secret or JWT secret in the frontend.
 - No backend debug dump endpoint.
-- Swagger, ReDoc, and OpenAPI JSON are disabled in FastAPI and blocked by Nginx.
+- Swagger, ReDoc, and OpenAPI JSON are disabled by FastAPI defaults and blocked by Nginx in secure mode.
 - TRACE is blocked by Nginx.
 - File metadata, download, and delete routes filter by `owner_id`.
 - Upload filenames are sanitized.
@@ -167,12 +176,101 @@ On Windows PowerShell, use `curl.exe` if `curl` is aliased to `Invoke-WebRequest
 - CORS is restricted to local frontend origins.
 - MinIO console is not proxied through Nginx.
 
+## First Challenge Branch: X-Forwarded-For Docs Bypass
+
+This optional challenge demonstrates OWASP A02 Security Misconfiguration. It intentionally combines two mistakes:
+
+- Nginx forwards a client-provided `X-Forwarded-For` value on docs routes.
+- FastAPI trusts that forwarding header when deciding whether a request is from localhost.
+
+The flag is:
+
+```text
+flag{trusted_proxy_headers_are_not_user_input}
+```
+
+### Secure Mode Tests
+
+Use the default `.env` values:
+
+```env
+NGINX_CONFIG_FILE=./nginx/nginx.conf
+CHALLENGE_MODE=false
+ENABLE_X_FORWARDED_DOCS_BYPASS=false
+```
+
+Start or restart:
+
+```bash
+docker compose up --build
+```
+
+Expected denied:
+
+```bash
+curl -i http://localhost/api/docs
+```
+
+Expected denied even with spoofed header:
+
+```bash
+curl -i -H "X-Forwarded-For: 127.0.0.1" http://localhost/api/docs
+```
+
+### Challenge Mode Tests
+
+Set these values in `.env`:
+
+```env
+NGINX_CONFIG_FILE=./nginx/nginx.conf.challenge
+CHALLENGE_MODE=true
+ENABLE_X_FORWARDED_DOCS_BYPASS=true
+```
+
+Restart:
+
+```bash
+docker compose up --build
+```
+
+Expected denied without header:
+
+```bash
+curl -i http://localhost/api/docs
+```
+
+Expected allowed with spoofed header:
+
+```bash
+curl -i -H "X-Forwarded-For: 127.0.0.1" http://localhost/api/docs
+```
+
+Expected OpenAPI allowed with spoofed header:
+
+```bash
+curl -i -H "X-Forwarded-For: 127.0.0.1" http://localhost/api/openapi.json
+```
+
+Expected flag visible:
+
+```bash
+curl -s -H "X-Forwarded-For: 127.0.0.1" http://localhost/api/openapi.json | grep trusted_proxy_headers
+```
+
+### Security Explanation
+
+`X-Forwarded-For` is a forwarding header used by proxies to record the original client IP address. A public client can also send this header unless the edge proxy strips or overwrites it. If an application treats this value as trustworthy, an attacker can claim to be `127.0.0.1` and reach features meant for localhost-only access.
+
+The correct fix is to keep public docs disabled or guarded by real authentication, make reverse proxies overwrite forwarding headers, and configure applications to trust forwarded headers only from known trusted proxies. Application code should not treat arbitrary client-supplied `X-Forwarded-For` values as proof of internal access.
+
+This challenge does not implement TRACE diagnostics, public MinIO buckets, email role bypasses, broken file authorization, SQL injection, XSS, weak JWTs, default credentials, or public MinIO console exposure.
+
 ## Planned Future Vulnerable Branches
 
-These branches are planned for later challenge work and are not implemented in this secure baseline:
+These branches are planned for later challenge work and are not implemented here:
 
 1. MinIO public bucket exposure branch
-2. Swagger/TRACE diagnostics branch
+2. TRACE diagnostics branch
 3. Resend support-email branch
 4. Broken file authorization branch
 

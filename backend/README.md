@@ -41,6 +41,9 @@ Direct `--reload` is for local editing only. The Docker image runs without debug
 - `GET /api/files/{file_id}`
 - `GET /api/files/{file_id}/download`
 - `DELETE /api/files/{file_id}`
+- `GET /api/docs` guarded manual docs route
+- `GET /api/openapi.json` guarded manual OpenAPI route
+- `GET /api/redoc` guarded manual ReDoc route
 
 ## Upload Policy
 
@@ -56,8 +59,22 @@ The backend enforces max upload size, sanitizes filenames, checks declared conte
 ## Security Notes
 
 - API docs are disabled with `docs_url=None`, `redoc_url=None`, and `openapi_url=None`.
+- Manual docs routes are guarded by a localhost check and are blocked by the default Nginx config.
 - CORS allows only local frontend origins.
 - The backend never trusts a client-provided user ID.
 - MinIO credentials are read from environment variables and never returned by API responses.
 - Download URLs expire after 5 minutes and are generated only after ownership validation.
 - Tables are created on startup for this first milestone. Alembic is the intended next step for migrations.
+
+## X-Forwarded-For Docs Bypass Challenge
+
+The backend has two challenge flags:
+
+```env
+CHALLENGE_MODE=false
+ENABLE_X_FORWARDED_DOCS_BYPASS=false
+```
+
+With `ENABLE_X_FORWARDED_DOCS_BYPASS=false`, docs access checks only `request.client.host` and does not trust `X-Forwarded-For`.
+
+With `ENABLE_X_FORWARDED_DOCS_BYPASS=true`, the docs guard intentionally trusts `X-Forwarded-For` values of `127.0.0.1` or `::1`. This is deliberately vulnerable and should be used only with `nginx/nginx.conf.challenge` for the first challenge branch.

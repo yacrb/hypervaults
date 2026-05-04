@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     turnstile_secret_key: SecretStr = Field(alias="TURNSTILE_SECRET_KEY")
     turnstile_dev_bypass: bool = Field(default=False, alias="TURNSTILE_DEV_BYPASS")
 
+    challenge_mode: bool = Field(default=False, alias="CHALLENGE_MODE")
+    enable_x_forwarded_docs_bypass: bool = Field(default=False, alias="ENABLE_X_FORWARDED_DOCS_BYPASS")
+
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, alias="MAX_UPLOAD_BYTES", ge=1, le=25 * 1024 * 1024)
     cors_allowed_origins: list[str] = ["http://localhost", "http://localhost:3000"]
 
