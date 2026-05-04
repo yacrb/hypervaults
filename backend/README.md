@@ -21,6 +21,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
+For Postgres 18+, Compose mounts the database volume at `/var/lib/postgresql`. If an older local `hypervaults_postgres-data` volume exists from a prior run, remove that stale volume before restarting the stack.
+
 For direct backend development, provide the same environment variables listed in `.env.example`, install requirements, then run:
 
 ```bash

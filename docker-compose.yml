@@ -74,7 +74,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # Postgres 18+ expects the volume at the parent directory so it can create
+      # a major-version-specific data directory internally.
+      - postgres-18-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
@@ -116,5 +118,5 @@ services:
     restart: "no"
 
 volumes:
-  postgres-data:
+  postgres-18-data:
   minio-data:

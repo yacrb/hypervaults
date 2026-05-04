@@ -44,6 +44,16 @@ cp .env.example .env
 docker compose up --build
 ```
 
+If you previously started an older version of this stack and Postgres logs an error about data in `/var/lib/postgresql/data`, recreate the local Postgres volume:
+
+```bash
+docker compose down
+docker volume rm hypervaults_postgres-data 2>/dev/null || true
+docker compose up --build
+```
+
+The current Compose file uses the Postgres 18-compatible `postgres-18-data` volume mounted at `/var/lib/postgresql`.
+
 Then open:
 
 - App: http://localhost
