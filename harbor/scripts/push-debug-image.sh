@@ -42,7 +42,7 @@ read_env_or_default() {
 
 FLAG_HARBOR_DEBUG_IMAGE_VALUE="$(read_env_or_default \
   FLAG_HARBOR_DEBUG_IMAGE \
-  'flag{debug_images_should_not_reach_prod_registries}')"
+  'Securinets{debug_images_should_not_reach_prod_registries}')"
 HARBOR_USER="$(read_env_or_default HARBOR_ADMIN_USER admin)"
 HARBOR_PASS="$(read_env_or_default HARBOR_ADMIN_PASSWORD Harbor12345)"
 

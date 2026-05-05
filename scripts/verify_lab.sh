@@ -1,7 +1,7 @@
 #!/bin/sh
 set -u
 
-BASE_URL="${BASE_URL:-http://localhost}"
+BASE_URL="${BASE_URL:-http://localhost:8080}"
 ENV_FILE="${ENV_FILE:-.env}"
 PASS_COUNT=0
 FAIL_COUNT=0

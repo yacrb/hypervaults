@@ -1,0 +1,19 @@
+# HyperVaults TLS edge for the DigitalOcean reserved IP 159.223.251.136.
+# Create the matching Cloudflare DNS records yourself, then install this file as
+# /etc/caddy/Caddyfile on the droplet.
+
+hypervaults.io {
+  reverse_proxy 127.0.0.1:8080
+}
+
+www.hypervaults.io {
+  redir https://hypervaults.io{uri} permanent
+}
+
+mailpit.hypervaults.io {
+  reverse_proxy 127.0.0.1:8080
+}
+
+registry.hypervaults.io, harbor.hypervaults.io {
+  reverse_proxy 127.0.0.1:8080
+}

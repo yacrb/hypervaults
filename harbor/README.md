@@ -41,7 +41,7 @@ cp harbor.yml.tmpl harbor.yml
 Set the following values (HTTP only, no HTTPS needed for local workshop use):
 
 ```yaml
-hostname: registry.hypervaults.local
+hostname: registry.hypervaults.io
 
 http:
   port: 8090
@@ -79,7 +79,9 @@ Login: `admin` / `Harbor12345`
 
 ## 4 — Add hosts Entry (for Nginx subdomain routing)
 
-To use the challenge nginx config's `registry.hypervaults.local` server block:
+To use the hosted challenge nginx config's `registry.hypervaults.io` server block,
+create the Cloudflare DNS record documented in [docs/deploy.md](../docs/deploy.md).
+For local testing, you can still use `registry.hypervaults.local`:
 
 ```bash
 # Linux / Mac
@@ -90,8 +92,10 @@ echo "127.0.0.1 registry.hypervaults.local" | sudo tee -a /etc/hosts
 # 127.0.0.1 registry.hypervaults.local
 ```
 
-After this, Harbor is reachable at `http://registry.hypervaults.local`
-(proxied through the main nginx on port 80) in addition to `http://localhost:8090`.
+After this, Harbor is reachable through the main HyperVaults proxy when that proxy
+is bound publicly on port 80 or fronted by a TLS edge. For the default local
+Compose profile, use `http://registry.hypervaults.local:8080` in addition to
+the direct Harbor URL `http://localhost:8090`.
 
 ---
 
@@ -109,7 +113,7 @@ Both scripts use `localhost:8090` / `admin` / `Harbor12345` by default.
 Override with environment variables if needed:
 
 ```bash
-HARBOR_HOST=registry.hypervaults.local HARBOR_PORT=80 \
+HARBOR_HOST=registry.hypervaults.io HARBOR_PORT=80 \
   sh harbor/scripts/push-debug-image.sh
 ```
 
@@ -123,7 +127,7 @@ In `.env`:
 CHALLENGE_MODE=true
 ENABLE_HARBOR_REGISTRY=true
 ENABLE_HARBOR_DEFAULT_CREDS_BRANCH=true
-HARBOR_HOST=registry.hypervaults.local
+HARBOR_HOST=registry.hypervaults.io
 ```
 
 Restart the main stack so the backend seeds the discovery email into Mailpit:
@@ -132,7 +136,7 @@ Restart the main stack so the backend seeds the discovery email into Mailpit:
 docker compose up --build
 ```
 
-Open Mailpit at http://localhost/mailpit/ (credentials: `devmail` / `devmail2026`)
+Open Mailpit at http://localhost:8080/mailpit/ (credentials: `devmail` / `devmail2026`)
 and look for the email **Harbor staging registry bootstrap** sent to `dev@hypervaults.local`.
 
 ---
@@ -142,13 +146,13 @@ and look for the email **Harbor staging registry bootstrap** sent to `dev@hyperv
 ### Discovery
 Players discover the Harbor email in Mailpit (chained from the TRACE diagnostics branch).
 The email reveals:
-- The registry URL: `http://registry.hypervaults.local`
+- The registry URL: `https://registry.hypervaults.io`
 - Bootstrap credentials: `admin / Harbor12345`
-- An image name: `registry.hypervaults.local/hypervaults/hypervaults-api:staging-debug`
+- An image name: `registry.hypervaults.io/hypervaults/hypervaults-api:staging-debug`
 
 ### Login to Harbor UI
 ```
-http://registry.hypervaults.local
+https://registry.hypervaults.io
 Username: admin
 Password: Harbor12345
 ```
@@ -156,8 +160,8 @@ Password: Harbor12345
 ### Pull the Image
 
 ```bash
-docker login registry.hypervaults.local -u admin -p Harbor12345
-docker pull registry.hypervaults.local/hypervaults/hypervaults-api:staging-debug
+docker login localhost:8090 -u admin -p Harbor12345
+docker pull localhost:8090/hypervaults/hypervaults-api:staging-debug
 ```
 
 Or using the direct port:
@@ -169,28 +173,28 @@ docker pull localhost:8090/hypervaults/hypervaults-api:staging-debug
 ### Recover the Flag
 
 ```bash
-docker run --rm registry.hypervaults.local/hypervaults/hypervaults-api:staging-debug
+docker run --rm localhost:8090/hypervaults/hypervaults-api:staging-debug
 ```
 
 Or explicitly:
 
 ```bash
 docker run --rm --entrypoint cat \
-  registry.hypervaults.local/hypervaults/hypervaults-api:staging-debug \
+  localhost:8090/hypervaults/hypervaults-api:staging-debug \
   /app/build-notes.txt
 ```
 
 **Expected flag:**
 
 ```text
-flag{debug_images_should_not_reach_prod_registries}
+Securinets{debug_images_should_not_reach_prod_registries}
 ```
 
 ### Bonus — Read the Staging Env File
 
 ```bash
 docker run --rm --entrypoint cat \
-  registry.hypervaults.local/hypervaults/hypervaults-api:staging-debug \
+  localhost:8090/hypervaults/hypervaults-api:staging-debug \
   /app/.env.staging
 ```
 
@@ -214,7 +218,7 @@ docker compose down -v
 ## Nginx Config Note
 
 The challenge nginx config (`nginx/nginx.conf.challenge`) includes a second server block
-for `registry.hypervaults.local` that proxies to Harbor via `host.docker.internal:8090`.
+for `registry.hypervaults.io` and `registry.hypervaults.local` that proxies to Harbor via `host.docker.internal:8090`.
 
 - **Docker Desktop (Mac/Windows):** works out of the box.
 - **Linux:** replace `host.docker.internal` with the Docker bridge IP (`172.17.0.1`) or

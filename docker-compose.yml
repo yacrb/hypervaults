@@ -25,12 +25,23 @@ services:
       mailpit:
         condition: service_healthy
     ports:
-      - "127.0.0.1:80:80"
+      # For a public droplet with host-level TLS, keep this bound to localhost
+      # and let Caddy/Nginx/Cloudflare Tunnel proxy to HTTP_PORT.
+      # For direct HTTP testing, set HTTP_BIND=0.0.0.0 and HTTP_PORT=80.
+      - "${HTTP_BIND:-127.0.0.1}:${HTTP_PORT:-8080}:80"
     environment:
       MAILPIT_BASIC_USER: ${MAILPIT_BASIC_USER:-devmail}
       MAILPIT_BASIC_PASSWORD: ${MAILPIT_BASIC_PASSWORD:-devmail2026}
+    extra_hosts:
+      # Required on Linux so the registry subdomain can proxy to a host-installed
+      # Harbor stack on port 8090. Harmless on Docker Desktop.
+      - "host.docker.internal:host-gateway"
     volumes:
       - ${NGINX_CONFIG_FILE:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
+    networks:
+      - edge
+      - app-net
+      - data-net
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 15s
@@ -50,6 +61,8 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
     expose:
       - "3000"
+    networks:
+      - app-net
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 15s
@@ -81,24 +94,24 @@ services:
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_FROM: ${SMTP_FROM:-HyperVaults Dev <no-reply@hypervaults.local>}
-      MAILPIT_UI_PUBLIC_URL: ${MAILPIT_UI_PUBLIC_URL:-http://localhost/mailpit}
+      MAILPIT_UI_PUBLIC_URL: ${MAILPIT_UI_PUBLIC_URL:-http://localhost:8080/mailpit/}
       # INTENTIONAL CHALLENGE VULNERABILITY: credentials are intentionally weak and
       # are leaked by TRACE /api/diagnostics/mail when the challenge is enabled.
       MAILPIT_BASIC_USER: ${MAILPIT_BASIC_USER:-devmail}
       MAILPIT_BASIC_PASSWORD: ${MAILPIT_BASIC_PASSWORD:-devmail2026}
       HARBOR_ADMIN_USER: ${HARBOR_ADMIN_USER:-admin}
       HARBOR_ADMIN_PASSWORD: ${HARBOR_ADMIN_PASSWORD:-Harbor12345}
-      FLAG_DOCS_BYPASS: ${FLAG_DOCS_BYPASS:-flag{trusted_proxy_headers_are_not_user_input}}
-      FLAG_TRACE_MAIL: ${FLAG_TRACE_MAIL:-flag{trace_mail_diagnostics_exposed}}
-      FLAG_MAILPIT_INBOX: ${FLAG_MAILPIT_INBOX:-flag{dev_mailboxes_do_not_belong_in_prod}}
-      FLAG_MINIO_PUBLIC_BUCKET: ${FLAG_MINIO_PUBLIC_BUCKET:-flag{public_buckets_make_private_uploads_public}}
-      FLAG_HARBOR_DEBUG_IMAGE: ${FLAG_HARBOR_DEBUG_IMAGE:-flag{debug_images_should_not_reach_prod_registries}}
+      FLAG_DOCS_BYPASS: ${FLAG_DOCS_BYPASS:-Securinets{headers_dont_lie_they_get_forwarded}}
+      FLAG_TRACE_MAIL: ${FLAG_TRACE_MAIL:-Securinets{trace_it_till_you_make_it}}
+      FLAG_MAILPIT_INBOX: ${FLAG_MAILPIT_INBOX:-Securinets{dev_mailboxes_do_not_belong_in_prod}}
+      FLAG_MINIO_PUBLIC_BUCKET: ${FLAG_MINIO_PUBLIC_BUCKET:-Securinets{public_buckets_make_private_uploads_public}}
+      FLAG_HARBOR_DEBUG_IMAGE: ${FLAG_HARBOR_DEBUG_IMAGE:-Securinets{debug_images_should_not_reach_prod_registries}}
       # Third challenge branch flags
       # INTENTIONAL CHALLENGE VULNERABILITY: when enabled, download responses include
       # a direct public object URL pointing at the unauthenticated /objects/ gateway.
       ENABLE_PUBLIC_MINIO_BUCKET: ${ENABLE_PUBLIC_MINIO_BUCKET:-false}
       ENABLE_OBJECTS_GATEWAY: ${ENABLE_OBJECTS_GATEWAY:-false}
-      OBJECTS_PUBLIC_BASE_URL: ${OBJECTS_PUBLIC_BASE_URL:-http://localhost/objects}
+      OBJECTS_PUBLIC_BASE_URL: ${OBJECTS_PUBLIC_BASE_URL:-http://localhost:8080/objects}
       ENABLE_HARBOR_REGISTRY: ${ENABLE_HARBOR_REGISTRY:-false}
       ENABLE_HARBOR_DEFAULT_CREDS_BRANCH: ${ENABLE_HARBOR_DEFAULT_CREDS_BRANCH:-false}
       HARBOR_HOST: ${HARBOR_HOST:-registry.hypervaults.local}
@@ -111,6 +124,9 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+    networks:
+      - app-net
+      - data-net
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()\""]
       interval: 15s
@@ -128,6 +144,8 @@ services:
       # Postgres 18+ expects the volume at the parent directory so it can create
       # a major-version-specific data directory internally.
       - postgres-18-data:/var/lib/postgresql
+    networks:
+      - data-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
@@ -144,7 +162,8 @@ services:
     expose:
       - "9000"
     ports:
-      - "127.0.0.1:9001:9001"
+      # Local admin console only; never expose this on a public droplet.
+      - "${ADMIN_BIND:-127.0.0.1}:9001:9001"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -153,6 +172,8 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
+    networks:
+      - data-net
 
   minio-init:
     image: minio/mc:latest
@@ -166,11 +187,13 @@ services:
       # INTENTIONAL CHALLENGE VULNERABILITY (third branch): when true, the bucket
       # policy is set to public read+list and challenge seed files are uploaded.
       ENABLE_PUBLIC_MINIO_BUCKET: ${ENABLE_PUBLIC_MINIO_BUCKET:-false}
-      FLAG_MINIO_PUBLIC_BUCKET: ${FLAG_MINIO_PUBLIC_BUCKET:-flag{public_buckets_make_private_uploads_public}}
+      FLAG_MINIO_PUBLIC_BUCKET: ${FLAG_MINIO_PUBLIC_BUCKET:-Securinets{public_buckets_make_private_uploads_public}}
     volumes:
       - ./minio/init/create-bucket.sh:/init/create-bucket.sh:ro
     entrypoint: ["/bin/sh", "/init/create-bucket.sh"]
     restart: "no"
+    networks:
+      - data-net
 
   # Mailpit: local SMTP catcher for development and staging emails.
   # SMTP is internal only (port 1025 not published to host).
@@ -193,7 +216,16 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    networks:
+      - app-net
 
 volumes:
   postgres-18-data:
   minio-data:
+
+networks:
+  edge:
+  app-net:
+    internal: true
+  data-net:
+    internal: true
