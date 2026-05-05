@@ -15,6 +15,13 @@ http {
         server minio:9000;
     }
 
+    # INTENTIONAL CHALLENGE VULNERABILITY (second branch):
+    # Mailpit web UI is proxied through Nginx when ENABLE_MAILPIT_EXPOSURE=true.
+    # Credentials are intentionally weak and leaked by the TRACE diagnostics endpoint.
+    upstream mailpit_ui {
+        server mailpit:8025;
+    }
+
     server {
         listen 80;
         server_name _;
@@ -26,11 +33,12 @@ http {
         add_header Referrer-Policy "no-referrer" always;
         add_header Permissions-Policy "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()" always;
 
-        if ($request_method = TRACE) {
-            return 405;
-        }
+        # INTENTIONAL CHALLENGE VULNERABILITY (second branch):
+        # TRACE is NOT blocked globally in challenge mode. TRACE requests reach
+        # /api/diagnostics/mail when ENABLE_TRACE_MAIL_DIAGNOSTICS=true on the backend.
+        # The backend controls whether the TRACE route is registered; if not, it returns 404/405.
 
-        # INTENTIONAL CHALLENGE VULNERABILITY:
+        # INTENTIONAL CHALLENGE VULNERABILITY (first branch):
         # These docs endpoints forward the client-provided X-Forwarded-For header.
         # The vulnerable backend challenge flag then trusts spoofed localhost values.
         location = /api/docs {
@@ -63,6 +71,21 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # INTENTIONAL CHALLENGE VULNERABILITY (second branch):
+        # TRACE /api/diagnostics/mail is allowed through to the backend.
+        # The backend only handles it when ENABLE_TRACE_MAIL_DIAGNOSTICS=true.
+        # The spoofed X-Forwarded-For header is preserved here so players can chain
+        # the first vulnerability (docs bypass) with the second (TRACE diagnostics).
+        location = /api/diagnostics/mail {
+            proxy_pass http://backend_app;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # Regular API routes keep normal proxy header behavior.
         location /api/ {
             proxy_pass http://backend_app;
@@ -72,6 +95,26 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # INTENTIONAL CHALLENGE VULNERABILITY (second branch):
+        # Mailpit web UI exposed at /mailpit/ with intentionally weak Basic Auth.
+        # Credentials (devmail / devmail2026) are leaked by TRACE /api/diagnostics/mail.
+        # The htpasswd file is generated at container startup by nginx/entrypoint.sh.
+        location /mailpit/ {
+            auth_basic "Mail Diagnostics";
+            auth_basic_user_file /etc/nginx/auth/mailpit.htpasswd;
+
+            proxy_pass http://mailpit_ui;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            # Mailpit uses WebSocket for live message updates.
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
         }
 
         # Presigned object downloads use private MinIO URLs issued only after API ownership checks.

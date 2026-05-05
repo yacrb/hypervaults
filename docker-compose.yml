@@ -1,15 +1,21 @@
 services:
   nginx:
     image: nginx:1.29-alpine
+    # Custom entrypoint generates the Mailpit htpasswd file then starts nginx.
+    # The secure config does not reference the htpasswd file; the challenge config does.
+    entrypoint: ["/bin/sh", "/nginx-entrypoint.sh"]
     depends_on:
       backend:
         condition: service_healthy
       frontend:
         condition: service_healthy
+      mailpit:
+        condition: service_healthy
     ports:
       - "80:80"
     volumes:
       - ${NGINX_CONFIG_FILE:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
+      - ./nginx/entrypoint.sh:/nginx-entrypoint.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 15s
@@ -53,11 +59,25 @@ services:
       TURNSTILE_DEV_BYPASS: ${TURNSTILE_DEV_BYPASS:?Set TURNSTILE_DEV_BYPASS in .env}
       CHALLENGE_MODE: ${CHALLENGE_MODE:-false}
       ENABLE_X_FORWARDED_DOCS_BYPASS: ${ENABLE_X_FORWARDED_DOCS_BYPASS:-false}
+      # Second challenge branch flags
+      ENABLE_TRACE_MAIL_DIAGNOSTICS: ${ENABLE_TRACE_MAIL_DIAGNOSTICS:-false}
+      ENABLE_MAILPIT_EXPOSURE: ${ENABLE_MAILPIT_EXPOSURE:-false}
+      # Mailpit SMTP settings — backend sends staging emails through Mailpit only
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-HyperVaults Dev <no-reply@hypervaults.local>}
+      MAILPIT_UI_PUBLIC_URL: ${MAILPIT_UI_PUBLIC_URL:-http://localhost/mailpit}
+      # INTENTIONAL CHALLENGE VULNERABILITY: credentials are intentionally weak and
+      # are leaked by TRACE /api/diagnostics/mail when the challenge is enabled.
+      MAILPIT_BASIC_USER: ${MAILPIT_BASIC_USER:-devmail}
+      MAILPIT_BASIC_PASSWORD: ${MAILPIT_BASIC_PASSWORD:-devmail2026}
     depends_on:
       postgres:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
     expose:
       - "8000"
     healthcheck:
@@ -116,6 +136,28 @@ services:
       - ./minio/init/create-bucket.sh:/init/create-bucket.sh:ro
     entrypoint: ["/bin/sh", "/init/create-bucket.sh"]
     restart: "no"
+
+  # Mailpit: local SMTP catcher for development and staging emails.
+  # SMTP is internal only (port 1025 not published to host).
+  # Web UI is internal only in secure mode; exposed through Nginx at /mailpit/
+  # only when NGINX_CONFIG_FILE=./nginx/nginx.conf.challenge and
+  # ENABLE_MAILPIT_EXPOSURE=true.
+  mailpit:
+    image: axllent/mailpit:latest
+    environment:
+      # Set the web root so Mailpit serves its UI from /mailpit/ when proxied.
+      # INTENTIONAL CHALLENGE VULNERABILITY: Mailpit is a dev mail catcher that
+      # should never be accessible from the public internet in production.
+      MP_WEBROOT: /mailpit/
+    expose:
+      - "1025"
+      - "8025"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8025/mailpit/api/v1/info >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
   postgres-18-data:
