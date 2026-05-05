@@ -57,6 +57,7 @@ The current Compose file uses the Postgres 18-compatible `postgres-18-data` volu
 Then open:
 
 - App: http://localhost
+- App fallback if your browser prefers a broken IPv6 localhost path: http://127.0.0.1
 - MinIO console: http://localhost:9001
 
 The default `.env.example` uses Cloudflare Turnstile official dummy keys that always pass local validation. For real Turnstile credentials, replace both `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`.
