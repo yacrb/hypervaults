@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     enable_trace_mail_diagnostics: bool = Field(default=False, alias="ENABLE_TRACE_MAIL_DIAGNOSTICS")
     enable_mailpit_exposure: bool = Field(default=False, alias="ENABLE_MAILPIT_EXPOSURE")
 
+    # Third challenge branch: public MinIO bucket + unauthenticated object gateway.
+    # ENABLE_PUBLIC_MINIO_BUCKET is a documentation flag here — the bucket policy
+    # is set by minio-init at startup based on its own copy of this env var.
+    # ENABLE_OBJECTS_GATEWAY controls whether the download response includes a direct
+    # public object URL, making the exposure beginner-discoverable.
+    enable_public_minio_bucket: bool = Field(default=False, alias="ENABLE_PUBLIC_MINIO_BUCKET")
+    enable_objects_gateway: bool = Field(default=False, alias="ENABLE_OBJECTS_GATEWAY")
+    objects_public_base_url: str = Field(default="http://localhost/objects", alias="OBJECTS_PUBLIC_BASE_URL")
+
     smtp_host: str = Field(default="mailpit", alias="SMTP_HOST")
     smtp_port: int = Field(default=1025, alias="SMTP_PORT")
     smtp_from: str = Field(default="HyperVaults Dev <no-reply@hypervaults.local>", alias="SMTP_FROM")

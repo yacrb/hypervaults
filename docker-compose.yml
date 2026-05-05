@@ -77,6 +77,12 @@ services:
       # are leaked by TRACE /api/diagnostics/mail when the challenge is enabled.
       MAILPIT_BASIC_USER: ${MAILPIT_BASIC_USER:-devmail}
       MAILPIT_BASIC_PASSWORD: ${MAILPIT_BASIC_PASSWORD:-devmail2026}
+      # Third challenge branch flags
+      # INTENTIONAL CHALLENGE VULNERABILITY: when enabled, download responses include
+      # a direct public object URL pointing at the unauthenticated /objects/ gateway.
+      ENABLE_PUBLIC_MINIO_BUCKET: ${ENABLE_PUBLIC_MINIO_BUCKET:-false}
+      ENABLE_OBJECTS_GATEWAY: ${ENABLE_OBJECTS_GATEWAY:-false}
+      OBJECTS_PUBLIC_BASE_URL: ${OBJECTS_PUBLIC_BASE_URL:-http://localhost/objects}
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,6 +144,9 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
       MINIO_BUCKET: ${MINIO_BUCKET:?Set MINIO_BUCKET in .env}
+      # INTENTIONAL CHALLENGE VULNERABILITY (third branch): when true, the bucket
+      # policy is set to public read+list and challenge seed files are uploaded.
+      ENABLE_PUBLIC_MINIO_BUCKET: ${ENABLE_PUBLIC_MINIO_BUCKET:-false}
     volumes:
       - ./minio/init/create-bucket.sh:/init/create-bucket.sh:ro
     entrypoint: ["/bin/sh", "/init/create-bucket.sh"]

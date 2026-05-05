@@ -117,6 +117,28 @@ http {
             proxy_set_header Connection "upgrade";
         }
 
+        # INTENTIONAL CHALLENGE VULNERABILITY (third branch — OWASP A02):
+        # Public object gateway. Combined with the public bucket policy set by
+        # minio-init (ENABLE_PUBLIC_MINIO_BUCKET=true), this makes the entire
+        # bucket anonymously browsable and downloadable — no credentials needed.
+        # Players discover it via the direct object URL returned in the download
+        # API response, then browse to /objects/hypervaults-files/ to list all files.
+        # Do not add authentication here; the misconfiguration is the point.
+        location /objects/ {
+            limit_except GET HEAD {
+                deny all;
+            }
+
+            rewrite ^/objects/(.*)$ /$1 break;
+            proxy_pass http://minio_api;
+            proxy_http_version 1.1;
+            proxy_set_header Host minio:9000;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # Presigned object downloads use private MinIO URLs issued only after API ownership checks.
         # Only GET and HEAD are allowed here; the MinIO console is never proxied.
         location /minio/ {

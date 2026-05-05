@@ -386,7 +386,7 @@ Seed emails are sent once per backend process lifetime. If the backend container
 | `nginx/nginx.conf` | Secure mode — TRACE blocked, `/mailpit` returns 404 |
 | `nginx/nginx.conf.challenge` | Challenge mode — TRACE allowed to backend, `/mailpit/` proxied with Basic Auth |
 
-`nginx/entrypoint.sh` generates the htpasswd file for Mailpit Basic Auth at container startup using `openssl` (available in `nginx:alpine`).
+The htpasswd entry for Mailpit Basic Auth is written inline by the nginx `entrypoint` in `docker-compose.yml` using a precomputed SHA1 hash.
 
 ### Security Explanation
 
@@ -394,13 +394,127 @@ TRACE is an HTTP method originally designed for diagnostic loop-back testing. It
 
 Development mail infrastructure (SMTP catchers, local mailers) should never be accessible from the public internet. Exposing Mailpit through a reverse proxy with weak credentials that are themselves leaked by another endpoint demonstrates how multiple small misconfigurations chain into a significant security failure.
 
+## Third Challenge Branch: Public MinIO Object Storage
+
+This optional challenge demonstrates OWASP A02 Security Misconfiguration via object storage misconfiguration:
+
+- The MinIO bucket policy is set to public read+list, making every uploaded user file accessible without credentials.
+- The MinIO object API is exposed through the reverse proxy at `/objects/` without authentication.
+- A seeded `flag.txt` at the bucket root provides the challenge flag.
+- The download API response includes a direct `public_object_url` pointing at the open gateway, making discovery beginner-friendly — players see the URL pattern after uploading any file.
+
+The flag is:
+
+```text
+flag{public_buckets_make_private_uploads_public}
+```
+
+### Expected Secure Mode Behavior
+
+In secure mode (default `.env`):
+
+- `GET /objects/` → 404 (explicit block in Nginx)
+- `GET /objects/hypervaults-files/` → 404
+- Uploaded file downloads require JWT authentication and return a short-lived presigned URL
+- `public_object_url` is absent from download responses
+
+### Challenge Mode Environment
+
+Set these values in `.env`:
+
+```env
+NGINX_CONFIG_FILE=./nginx/nginx.conf.challenge
+CHALLENGE_MODE=true
+ENABLE_PUBLIC_MINIO_BUCKET=true
+ENABLE_OBJECTS_GATEWAY=true
+```
+
+Restart (minio-init must re-run to apply the bucket policy and seed files):
+
+```bash
+docker compose down
+docker compose up --build
+```
+
+### Challenge Test Commands
+
+**Step 1 — Sign up and upload a file:**
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"player@example.com","password":"CorrectHorseBatteryStaple!42","turnstile_token":"XXXX.DUMMY.TOKEN.XXXX"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+printf "test content\n" > test.txt
+curl -s -X POST http://localhost/api/files/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@test.txt;type=text/plain"
+```
+
+**Step 2 — Request a download and observe the public URL:**
+
+```bash
+FILE_ID=$(curl -s http://localhost/api/files -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+
+curl -s http://localhost/api/files/$FILE_ID/download \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+```
+
+The response includes `public_object_url` pointing at `/objects/hypervaults-files/users/...`.
+
+**Step 3 — Browse the bucket:**
+
+```bash
+curl -s "http://localhost/objects/hypervaults-files/?list-type=2" | python3 -m json.tool
+```
+
+Or open in a browser:
+
+```text
+http://localhost/objects/hypervaults-files/
+```
+
+**Step 4 — Retrieve the flag:**
+
+```bash
+curl -s http://localhost/objects/hypervaults-files/flag.txt
+```
+
+Expected:
+
+```text
+flag{public_buckets_make_private_uploads_public}
+```
+
+**Step 5 — Find the hint file:**
+
+```bash
+curl -s http://localhost/objects/hypervaults-files/support/old-export-note.txt
+```
+
+### Notes on minio-init
+
+The `minio-init` container runs once per `docker compose up` session. If you switch `ENABLE_PUBLIC_MINIO_BUCKET` between runs, bring the stack fully down and back up so `minio-init` re-runs and updates the bucket policy:
+
+```bash
+docker compose down
+docker compose up --build
+```
+
+### Security Explanation
+
+Public object storage buckets are one of the most common cloud misconfigurations. An S3-compatible bucket set to public read/list exposes every object stored in it, regardless of how private the application believes those objects to be. The application-level ownership checks in the download API remain intact, but they are bypassed entirely when the bucket itself is publicly accessible through the storage API.
+
+The correct mitigations are: keep buckets private by default, use pre-signed URLs with short TTLs for object access, never expose the storage API directly to the internet, and audit bucket policies regularly.
+
 ## Planned Future Vulnerable Branches
 
 These branches are planned for later challenge work and are not implemented here:
 
-1. MinIO public bucket exposure branch
-2. Resend support-email branch
-3. Broken file authorization branch
+1. Resend support-email branch
+2. Broken file authorization branch
 
 ## Development Notes
 

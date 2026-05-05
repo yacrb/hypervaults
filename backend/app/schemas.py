@@ -44,3 +44,8 @@ class FileRead(BaseModel):
 class DownloadUrlResponse(BaseModel):
     download_url: str
     expires_in_seconds: int
+    # INTENTIONAL CHALLENGE VULNERABILITY (third branch):
+    # Included only when ENABLE_OBJECTS_GATEWAY=true. Points directly at the
+    # public object gateway, letting players discover the open bucket by following
+    # the URL they receive after uploading a file.
+    public_object_url: str | None = None

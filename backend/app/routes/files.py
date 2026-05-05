@@ -90,9 +90,21 @@ def download_file(
     db: Session = Depends(get_db),
 ) -> schemas.DownloadUrlResponse:
     stored_file = get_owned_file_or_404(file_id, current_user.id, db)
+
+    public_object_url = None
+    if settings.enable_objects_gateway:
+        # INTENTIONAL CHALLENGE VULNERABILITY (third branch):
+        # Return a direct public object URL alongside the presigned URL.
+        # This makes the open bucket beginner-discoverable: the player sees the
+        # URL pattern, strips the filename, and browses to the bucket root to
+        # find other files and the seeded flag.txt.
+        base = settings.objects_public_base_url.rstrip("/")
+        public_object_url = f"{base}/{settings.minio_bucket}/{stored_file.stored_object_key}"
+
     return schemas.DownloadUrlResponse(
         download_url=presigned_download_url(stored_file.stored_object_key),
         expires_in_seconds=DOWNLOAD_URL_TTL_SECONDS,
+        public_object_url=public_object_url,
     )
 
 
