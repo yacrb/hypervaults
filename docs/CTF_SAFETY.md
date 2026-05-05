@@ -13,5 +13,5 @@ HyperVaults challenge mode is intentionally vulnerable. Treat every enabled bran
 - Keep Cloudflare, Nginx, or an equivalent edge proxy in front of any public workshop deployment.
 - Rate-limit public endpoints if hosted outside a local classroom network.
 - Reset seeded data before each workshop when players need a clean environment.
-- Use only fake CTF values from `secrets.example/` or private event-specific values in ignored `secrets/`.
+- Use only fake CTF values in `.env`; never paste real credentials or production secrets into the lab configuration.
 - Destroy or reset lab services after the event.

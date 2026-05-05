@@ -1,1 +1,0 @@
-flag{public_buckets_make_private_uploads_public}

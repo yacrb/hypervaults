@@ -119,7 +119,7 @@ http {
 
         # INTENTIONAL CHALLENGE VULNERABILITY (second branch):
         # Mailpit web UI exposed at /mailpit/ with intentionally weak Basic Auth.
-        # Credentials are generated from Docker secrets and leaked by TRACE /api/diagnostics/mail.
+        # Credentials are generated from Compose environment values and leaked by TRACE /api/diagnostics/mail.
         # The htpasswd file is generated at container startup by nginx/entrypoint.sh.
         location /mailpit/ {
             auth_basic "Mail Diagnostics";

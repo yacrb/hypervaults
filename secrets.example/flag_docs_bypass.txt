@@ -1,1 +1,0 @@
-flag{trusted_proxy_headers_are_not_user_input}

@@ -5,7 +5,6 @@ set -e
 
 HARBOR_HOST="${HARBOR_HOST:-localhost}"
 HARBOR_PORT="${HARBOR_PORT:-8090}"
-SECRETS_DIR="${SECRETS_DIR:-./secrets.example}"
 PROJECT="${PROJECT:-hypervaults}"
 IMAGE_NAME="${IMAGE_NAME:-hypervaults-api}"
 IMAGE_TAG="${IMAGE_TAG:-staging-debug}"
@@ -17,34 +16,35 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE_DIR="${SCRIPT_DIR}/../challenge-image"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-read_secret_or_env() {
-  secret_file="$1"
-  env_name="$2"
-  default_value="$3"
-  secret_path="${REPO_ROOT}/${SECRETS_DIR#./}/${secret_file}"
-  if [ -s "$secret_path" ]; then
-    sed -e 's/[[:space:]]*$//' "$secret_path"
+read_env_file_value() {
+  env_name="$1"
+  env_file="${ENV_FILE:-${REPO_ROOT}/.env}"
+  if [ -f "$env_file" ]; then
+    grep -E "^${env_name}=" "$env_file" | tail -n 1 | cut -d= -f2-
+  fi
+}
+
+read_env_or_default() {
+  env_name="$1"
+  default_value="$2"
+  eval "env_value=\${$env_name:-}"
+  if [ -n "$env_value" ]; then
+    printf '%s' "$env_value"
   else
-    eval "env_value=\${$env_name:-}"
-    if [ -n "$env_value" ]; then
-      printf '%s' "$env_value"
+    file_value="$(read_env_file_value "$env_name")"
+    if [ -n "$file_value" ]; then
+      printf '%s' "$file_value"
     else
       printf '%s' "$default_value"
     fi
   fi
 }
 
-FLAG_HARBOR_DEBUG_IMAGE_VALUE="$(read_secret_or_env \
-  flag_harbor_debug_image.txt \
+FLAG_HARBOR_DEBUG_IMAGE_VALUE="$(read_env_or_default \
   FLAG_HARBOR_DEBUG_IMAGE \
-  '')"
-HARBOR_USER="$(read_secret_or_env harbor_admin_user.txt HARBOR_USER '')"
-HARBOR_PASS="$(read_secret_or_env harbor_admin_password.txt HARBOR_PASS '')"
-
-if [ -z "$FLAG_HARBOR_DEBUG_IMAGE_VALUE" ] || [ -z "$HARBOR_USER" ] || [ -z "$HARBOR_PASS" ]; then
-  echo "Harbor flag and credentials must be set through SECRETS_DIR or environment variables." >&2
-  exit 1
-fi
+  'flag{debug_images_should_not_reach_prod_registries}')"
+HARBOR_USER="$(read_env_or_default HARBOR_ADMIN_USER admin)"
+HARBOR_PASS="$(read_env_or_default HARBOR_ADMIN_PASSWORD Harbor12345)"
 
 echo "Building ${FULL_IMAGE} ..."
 docker build \

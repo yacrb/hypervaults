@@ -1,1 +1,0 @@
-flag{dev_mailboxes_do_not_belong_in_prod}

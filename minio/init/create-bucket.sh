@@ -7,21 +7,14 @@ set -eu
 
 ENABLE_PUBLIC_MINIO_BUCKET="${ENABLE_PUBLIC_MINIO_BUCKET:-false}"
 
-read_secret_or_env() {
-  secret_name="$1"
-  env_name="$2"
-  default_value="$3"
-  secret_path="/run/secrets/$secret_name"
-  if [ -s "$secret_path" ]; then
-    IFS= read -r secret_value < "$secret_path" || true
-    printf '%s' "$secret_value"
+read_env_or_default() {
+  env_name="$1"
+  default_value="$2"
+  eval "env_value=\${$env_name:-}"
+  if [ -n "$env_value" ]; then
+    printf '%s' "$env_value"
   else
-    eval "env_value=\${$env_name:-}"
-    if [ -n "$env_value" ]; then
-      printf '%s' "$env_value"
-    else
-      printf '%s' "$default_value"
-    fi
+    printf '%s' "$default_value"
   fi
 }
 
@@ -34,9 +27,9 @@ else
 fi
 
 if [ "$ENABLE_PUBLIC_MINIO_BUCKET" = "true" ]; then
-  FLAG_MINIO_PUBLIC_BUCKET_VALUE="$(read_secret_or_env flag_minio_public_bucket FLAG_MINIO_PUBLIC_BUCKET '')"
+  FLAG_MINIO_PUBLIC_BUCKET_VALUE="$(read_env_or_default FLAG_MINIO_PUBLIC_BUCKET '')"
   if [ -z "$FLAG_MINIO_PUBLIC_BUCKET_VALUE" ]; then
-    echo "FLAG_MINIO_PUBLIC_BUCKET or /run/secrets/flag_minio_public_bucket is required in public bucket challenge mode" >&2
+    echo "FLAG_MINIO_PUBLIC_BUCKET is required in public bucket challenge mode" >&2
     exit 1
   fi
 

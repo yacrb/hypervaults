@@ -1,1 +1,0 @@
-flag{debug_images_should_not_reach_prod_registries}
