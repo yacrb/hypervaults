@@ -1,9 +1,16 @@
 services:
   nginx:
     image: nginx:1.29-alpine
-    # Custom entrypoint generates the Mailpit htpasswd file then starts nginx.
-    # The secure config does not reference the htpasswd file; the challenge config does.
-    entrypoint: ["/bin/sh", "/nginx-entrypoint.sh"]
+    # Inline entrypoint: write the Mailpit htpasswd entry then start nginx.
+    # Done inline to avoid CRLF line-ending issues with mounted shell scripts on Windows.
+    # The secure config never references the htpasswd file; only the challenge config does.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        mkdir -p /etc/nginx/auth &&
+        printf 'devmail:{SHA}G5mTZuWlOhreEhNXaqzsthmcwrg=\n' > /etc/nginx/auth/mailpit.htpasswd &&
+        exec nginx -g 'daemon off;'
     depends_on:
       backend:
         condition: service_healthy
@@ -15,7 +22,6 @@ services:
       - "127.0.0.1:80:80"
     volumes:
       - ${NGINX_CONFIG_FILE:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
-      - ./nginx/entrypoint.sh:/nginx-entrypoint.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 15s
