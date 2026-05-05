@@ -509,6 +509,90 @@ Public object storage buckets are one of the most common cloud misconfigurations
 
 The correct mitigations are: keep buckets private by default, use pre-signed URLs with short TTLs for object access, never expose the storage API directly to the internet, and audit bucket policies regularly.
 
+## Fourth Challenge Branch: Harbor Registry Default Credentials
+
+This optional challenge demonstrates OWASP A02 Security Misconfiguration via container registry mismanagement:
+
+- Harbor is deployed with its default admin password (`Harbor12345`) never rotated.
+- A staging debug image (`hypervaults-api:staging-debug`) is left in the production-facing registry.
+- The image contains `build-notes.txt` with the challenge flag.
+- Players discover the registry through a Bootstrap email seeded into Mailpit.
+
+The flag is:
+
+```text
+flag{debug_images_should_not_reach_prod_registries}
+```
+
+### Setup
+
+Harbor runs as a separate Docker Compose stack. See [harbor/README.md](harbor/README.md) for full setup instructions, including:
+
+- Downloading the Harbor installer
+- Configuring `harbor.yml` with the challenge credentials
+- Creating the project and pushing the debug image
+- Adding the `/etc/hosts` entry for local subdomain routing
+
+### Enable the Challenge Branch
+
+In `.env`:
+
+```env
+CHALLENGE_MODE=true
+ENABLE_HARBOR_REGISTRY=true
+ENABLE_HARBOR_DEFAULT_CREDS_BRANCH=true
+HARBOR_HOST=registry.hypervaults.local
+```
+
+Restart the main stack after enabling so the backend seeds the discovery email:
+
+```bash
+docker compose up --build
+```
+
+### Player Path
+
+**Step 1 — Find the Harbor email in Mailpit (chained from second branch):**
+
+Open http://localhost/mailpit/, log in with `devmail` / `devmail2026`, and look for **Harbor staging registry bootstrap** in `dev@hypervaults.local`.
+
+**Step 2 — Log in to Harbor:**
+
+```text
+http://registry.hypervaults.local
+Username: admin
+Password: Harbor12345
+```
+
+**Step 3 — Pull the debug image:**
+
+```bash
+docker login registry.hypervaults.local -u admin -p Harbor12345
+docker pull registry.hypervaults.local/hypervaults/hypervaults-api:staging-debug
+```
+
+**Step 4 — Recover the flag:**
+
+```bash
+docker run --rm registry.hypervaults.local/hypervaults/hypervaults-api:staging-debug
+```
+
+Expected output:
+
+```text
+flag{debug_images_should_not_reach_prod_registries}
+```
+
+### Security Explanation
+
+Container registries frequently inherit default credentials from install scripts and are never hardened before connecting to CI/CD pipelines. Debug or staging images often accumulate internal environment variables, secrets, or build notes that should never leave the development environment. Leaving such images in a shared or production-facing registry — even under a separate tag — exposes them to anyone who can authenticate, and default credentials ensure that threshold is nearly zero.
+
+The correct mitigations are: change the registry admin password immediately after installation, use scoped robot accounts instead of the admin account for CI/CD, enforce image signing, regularly audit and remove stale tags, and never store secrets or flags in image layers.
+
+### Nginx Config Note
+
+`nginx/nginx.conf.challenge` includes a second server block for `registry.hypervaults.local` that proxies to Harbor via `host.docker.internal:8090` (Docker Desktop). On Linux, replace with the Docker bridge IP (`172.17.0.1`) or add `--add-host=host.docker.internal:host-gateway` to the nginx service. Secure mode has no Harbor server block.
+
 ## Planned Future Vulnerable Branches
 
 These branches are planned for later challenge work and are not implemented here:

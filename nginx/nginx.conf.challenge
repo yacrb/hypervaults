@@ -167,4 +167,41 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
     }
+
+    # INTENTIONAL CHALLENGE VULNERABILITY (fourth branch — OWASP A02):
+    # Harbor registry proxied at registry.hypervaults.local (and .io for hosted).
+    # Harbor runs as a separate Docker Compose stack on host port 8090.
+    # Add "127.0.0.1 registry.hypervaults.local" to /etc/hosts for local use.
+    # host.docker.internal reaches the Docker Desktop host on Mac/Windows.
+    # On Linux, replace with the Docker bridge IP: 172.17.0.1
+    # See harbor/README.md for Harbor setup instructions.
+    upstream harbor_proxy {
+        server host.docker.internal:8090;
+    }
+
+    server {
+        listen 80;
+        server_name registry.hypervaults.local registry.hypervaults.io;
+
+        # Harbor image layers can be large.
+        client_max_body_size 500m;
+
+        # INTENTIONAL CHALLENGE VULNERABILITY: Harbor is proxied without
+        # additional authentication. The default admin/Harbor12345 credentials
+        # are the vulnerability — players discover them via the Mailpit email.
+        location / {
+            proxy_pass http://harbor_proxy;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_read_timeout 900s;
+            proxy_send_timeout 900s;
+            # Required for Docker client chunked uploads.
+            proxy_buffering off;
+            proxy_request_buffering off;
+        }
+    }
 }

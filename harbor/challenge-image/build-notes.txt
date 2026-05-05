@@ -1,0 +1,6 @@
+HyperVaults API staging debug image.
+
+This image was built for QA and accidentally kept in the production-facing registry.
+Debug images should never contain internal build notes or secrets.
+
+flag{debug_images_should_not_reach_prod_registries}

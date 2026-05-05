@@ -22,9 +22,10 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     Base.metadata.create_all(bind=engine)
     ensure_bucket_exists()
 
-    # Second challenge branch: seed staging emails into Mailpit so players find them
-    # after discovering the exposed Mailpit UI via TRACE diagnostics.
-    if settings.challenge_mode and settings.enable_trace_mail_diagnostics:
+    # Seed challenge emails whenever challenge mode is active.
+    # seed_challenge_emails() checks each branch flag independently, so only
+    # the emails relevant to enabled branches are sent.
+    if settings.challenge_mode:
         seed_challenge_emails()
 
     yield

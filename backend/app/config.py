@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     enable_trace_mail_diagnostics: bool = Field(default=False, alias="ENABLE_TRACE_MAIL_DIAGNOSTICS")
     enable_mailpit_exposure: bool = Field(default=False, alias="ENABLE_MAILPIT_EXPOSURE")
 
+    # Fourth challenge branch: Harbor registry default credentials + debug image.
+    # ENABLE_HARBOR_REGISTRY is a documentation flag (Harbor runs as a separate
+    # stack — see harbor/README.md).
+    # ENABLE_HARBOR_DEFAULT_CREDS_BRANCH seeds the Harbor bootstrap email into
+    # Mailpit so players discover the registry through the mail chain.
+    enable_harbor_registry: bool = Field(default=False, alias="ENABLE_HARBOR_REGISTRY")
+    enable_harbor_default_creds_branch: bool = Field(default=False, alias="ENABLE_HARBOR_DEFAULT_CREDS_BRANCH")
+    harbor_host: str = Field(default="registry.hypervaults.local", alias="HARBOR_HOST")
+
     # Third challenge branch: public MinIO bucket + unauthenticated object gateway.
     # ENABLE_PUBLIC_MINIO_BUCKET is a documentation flag here — the bucket policy
     # is set by minio-init at startup based on its own copy of this env var.
