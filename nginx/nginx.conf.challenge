@@ -235,7 +235,7 @@ http {
 
     server {
         listen 80;
-        server_name registry.hypervaults.local harbor.hypervaults.local registry.hypervaults.io harbor.hypervaults.io ~^(registry|harbor)\..+$;
+        server_name registry.hypervaults.local registry.hypervaults.io ~^registry\..+$;
 
         # Harbor image layers can be large.
         client_max_body_size 500m;

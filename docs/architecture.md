@@ -38,7 +38,7 @@ PostgreSQL, backend, frontend, Mailpit SMTP, and MinIO API are not published dir
 
 ## Shared-Service Safety
 
-Mailpit UI/API traffic through Nginx allows `GET`, `HEAD`, and `OPTIONS` only. This prevents normal player workflows from deleting shared seeded messages. If organizers expose Mailpit's raw port manually, that safeguard is bypassed.
+Mailpit UI/API traffic through Nginx allows `GET`, `HEAD`, and `OPTIONS` only. This prevents normal player workflows from deleting shared seeded messages. The backend also checks Mailpit every 10 seconds and re-sends any missing seeded challenge messages. If organizers expose Mailpit's raw port manually, the Nginx safeguard is bypassed, but the reseed loop still restores missing seed emails.
 
 MinIO public exposure is read/list only through bucket policy and Nginx method filtering. Player uploads through the app still require authentication and ownership checks, but the public bucket challenge intentionally makes object contents readable.
 

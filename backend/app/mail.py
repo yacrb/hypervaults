@@ -5,23 +5,23 @@ Sends plain-text emails through Mailpit (a local SMTP catcher) during
 development and staging. Never sends real external email — Mailpit captures
 everything at SMTP_HOST:SMTP_PORT and makes it visible in its web UI.
 
-In challenge mode, seed emails are injected at startup so players find them
-after discovering the exposed Mailpit UI. Each seed group is gated on its own
-feature flag so branches can be enabled independently.
+In challenge mode, seed emails are kept present in Mailpit so players can still
+recover the chain if another player deletes shared mailbox entries.
 """
 
-import smtplib
+import asyncio
 import logging
+import smtplib
 from email.mime.text import MIMEText
+
+import httpx
 
 from app.challenge_config import get_challenge_config
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# In-memory guard so seed emails are sent only once per process lifetime.
-# Duplicates can still appear after a container restart — noted in README.
-_seed_done: bool = False
+_startup_fallback_sent: bool = False
 
 
 def _trace_seed_emails(mailpit_inbox_flag: str) -> list[tuple[str, str, str]]:
@@ -63,6 +63,37 @@ def _trace_seed_emails(mailpit_inbox_flag: str) -> list[tuple[str, str, str]]:
     ]
 
 
+def _enabled_seed_emails() -> list[tuple[str, str, str]]:
+    settings = get_settings()
+    challenge_config = get_challenge_config()
+    emails: list[tuple[str, str, str]] = []
+
+    # Second branch: TRACE mail diagnostics + exposed Mailpit
+    if settings.enable_trace_mail_diagnostics:
+        emails.extend(_trace_seed_emails(challenge_config.mailpit_inbox_flag))
+
+    # Fourth branch: Harbor registry default credentials
+    if settings.enable_harbor_default_creds_branch:
+        harbor_url = f"https://{settings.harbor_host}"
+        body = (
+            "Harbor staging registry is online.\n\n"
+            f"URL:\n{harbor_url}\n\n"
+            "Bootstrap admin:\n"
+            f"{challenge_config.harbor_admin_user} / {challenge_config.harbor_admin_password}\n\n"
+            "TODO before production:\n"
+            "- rotate the default Harbor admin password\n"
+            "- remove staging-debug image\n"
+            "- replace bootstrap admin with scoped robot accounts\n\n"
+            # INTENTIONAL CHALLENGE VULNERABILITY: image path leaks credentials and
+            # hints at the staging-debug image containing a flag.
+            f"Image:\n"
+            f"{settings.harbor_host}/hypervaults/hypervaults-api:staging-debug\n"
+        )
+        emails.append(("dev@hypervaults.local", "Harbor staging registry bootstrap", body))
+
+    return emails
+
+
 def send_email(to: str, subject: str, body: str) -> None:
     settings = get_settings()
     msg = MIMEText(body, "plain")
@@ -79,45 +110,57 @@ def _try_send(to: str, subject: str, body: str) -> None:
         send_email(to, subject, body)
         logger.info("Seeded challenge email: %s -> %s", subject, to)
     except Exception as exc:
-        # Non-fatal: Mailpit may still be starting up. Restart the backend
-        # container if seeded emails are missing from Mailpit.
+        # Non-fatal: Mailpit may still be starting up. The periodic reseed loop
+        # will try again without failing the backend process.
         logger.warning("Failed to seed email '%s' to %s: %s", subject, to, exc)
 
 
-def seed_challenge_emails() -> None:
-    """Send all enabled challenge seed emails to Mailpit on first call per process.
-
-    Checks each branch flag independently so branches can be mixed freely.
-    Called at startup when CHALLENGE_MODE=true.
-    """
-    global _seed_done
-    if _seed_done:
-        return
-    _seed_done = True
-
+def _mailpit_subjects() -> set[str] | None:
     settings = get_settings()
-    challenge_config = get_challenge_config()
+    try:
+        response = httpx.get(settings.mailpit_api_url, params={"limit": 1000}, timeout=3.0)
+        response.raise_for_status()
+        payload = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Failed to query Mailpit messages for reseed check: %s", exc)
+        return None
 
-    # Second branch: TRACE mail diagnostics + exposed Mailpit
-    if settings.enable_trace_mail_diagnostics:
-        for to, subject, body in _trace_seed_emails(challenge_config.mailpit_inbox_flag):
+    messages = payload.get("messages") or payload.get("Messages") or []
+    subjects: set[str] = set()
+    for message in messages:
+        subject = message.get("Subject") or message.get("subject")
+        if isinstance(subject, str):
+            subjects.add(subject)
+    return subjects
+
+
+def ensure_challenge_emails() -> None:
+    """Send any enabled seed emails missing from Mailpit.
+
+    The check is subject-based because each seeded challenge email has a stable,
+    unique subject. If Mailpit's API is temporarily unavailable at startup, send
+    one compatibility seed pass, then wait for the API before future reseeds.
+    """
+    global _startup_fallback_sent
+    desired_emails = _enabled_seed_emails()
+    if not desired_emails:
+        return
+
+    existing_subjects = _mailpit_subjects()
+    if existing_subjects is None:
+        if not _startup_fallback_sent:
+            _startup_fallback_sent = True
+            for to, subject, body in desired_emails:
+                _try_send(to, subject, body)
+        return
+
+    for to, subject, body in desired_emails:
+        if subject not in existing_subjects:
             _try_send(to, subject, body)
 
-    # Fourth branch: Harbor registry default credentials
-    if settings.enable_harbor_default_creds_branch:
-        harbor_url = f"http://{settings.harbor_host}"
-        body = (
-            "Harbor staging registry is online.\n\n"
-            f"URL:\n{harbor_url}\n\n"
-            "Bootstrap admin:\n"
-            f"{challenge_config.harbor_admin_user} / {challenge_config.harbor_admin_password}\n\n"
-            "TODO before production:\n"
-            "- rotate the default Harbor admin password\n"
-            "- remove staging-debug image\n"
-            "- replace bootstrap admin with scoped robot accounts\n\n"
-            # INTENTIONAL CHALLENGE VULNERABILITY: image path leaks credentials and
-            # hints at the staging-debug image containing a flag.
-            f"Image:\n"
-            f"{settings.harbor_host}/hypervaults/hypervaults-api:staging-debug\n"
-        )
-        _try_send("dev@hypervaults.local", "Harbor staging registry bootstrap", body)
+
+async def reseed_challenge_emails_forever() -> None:
+    settings = get_settings()
+    while True:
+        await asyncio.sleep(settings.mailpit_reseed_interval_seconds)
+        await asyncio.to_thread(ensure_challenge_emails)

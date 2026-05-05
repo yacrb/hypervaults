@@ -101,11 +101,11 @@ Securinets{debug_images_should_not_reach_prod_registries}
 
 ## Reset Notes
 
-- Re-seed mail only: `docker compose restart backend`
+- Re-seed mail only: wait up to `MAILPIT_RESEED_INTERVAL_SECONDS` seconds or run `docker compose restart backend`
 - Full HyperVaults reset: `docker compose down -v && docker compose up -d --build`
 
 ## Known Limitations
 
-- Mailpit does not provide a native read-only public UI. The workshop read-only model is enforced by Nginx method filtering. Do not expose Mailpit port `8025`.
+- Mailpit does not provide a native read-only public UI. The workshop read-only model is enforced by Nginx method filtering, plus the backend re-sends missing seed messages every 10 seconds. Do not expose Mailpit port `8025`.
 - Harbor is intentionally external because upstream Harbor generates its own Compose deployment. The main stack only proxies and seeds discovery material after Harbor is installed.
 - External scoring platforms are not managed by this repo.

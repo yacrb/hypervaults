@@ -1,5 +1,6 @@
-from contextlib import asynccontextmanager
+import asyncio
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.database import Base, engine
 from app.docs import openapi_description, register_docs_routes
-from app.mail import seed_challenge_emails
+from app.mail import ensure_challenge_emails, reseed_challenge_emails_forever
 from app.routes import auth, files, health
 from app.storage import ensure_bucket_exists
 
@@ -22,13 +23,21 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     Base.metadata.create_all(bind=engine)
     ensure_bucket_exists()
 
-    # Seed challenge emails whenever challenge mode is active.
-    # seed_challenge_emails() checks each branch flag independently, so only
-    # the emails relevant to enabled branches are sent.
-    if settings.challenge_mode:
-        seed_challenge_emails()
+    reseed_task: asyncio.Task[None] | None = None
 
-    yield
+    # Keep shared challenge emails present whenever challenge mode is active.
+    # The reseed check is idempotent and only sends messages missing from Mailpit.
+    if settings.challenge_mode:
+        ensure_challenge_emails()
+        reseed_task = asyncio.create_task(reseed_challenge_emails_forever())
+
+    try:
+        yield
+    finally:
+        if reseed_task:
+            reseed_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await reseed_task
 
 
 app = FastAPI(

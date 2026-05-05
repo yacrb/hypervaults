@@ -13,7 +13,6 @@ Type  Name      Value
 A     @         159.223.251.136
 A     mailpit   159.223.251.136
 A     registry  159.223.251.136   optional Harbor branch
-A     harbor    159.223.251.136   optional Harbor branch
 CNAME www       hypervaults.io    optional
 ```
 
@@ -21,6 +20,7 @@ Use DNS-only mode until Caddy has issued certificates. After the certificates ar
 valid, Cloudflare proxying is fine if SSL/TLS mode is set to Full or Full strict.
 Do not rely on wildcard routing unless you also create a wildcard DNS record and
 add explicit Caddy routes for the services you want public.
+Use `registry.hypervaults.io` as the only public Harbor hostname.
 
 Do not create an extra challenge subdomain for this stack. The app runs at:
 
@@ -76,6 +76,8 @@ PUBLIC_API_URL=https://hypervaults.io/api
 OBJECTS_PUBLIC_BASE_URL=https://hypervaults.io/objects
 MINIO_PRESIGNED_PUBLIC_BASE_URL=https://hypervaults.io/minio
 MAILPIT_UI_PUBLIC_URL=https://mailpit.hypervaults.io/mailpit/
+MAILPIT_API_URL=http://mailpit:8025/mailpit/api/v1/messages
+MAILPIT_RESEED_INTERVAL_SECONDS=10
 CORS_ALLOWED_ORIGINS=https://hypervaults.io
 
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=<Cloudflare Turnstile site key>

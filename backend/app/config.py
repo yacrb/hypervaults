@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     smtp_port: int = Field(default=1025, alias="SMTP_PORT")
     smtp_from: str = Field(default="HyperVaults Dev <no-reply@hypervaults.local>", alias="SMTP_FROM")
     mailpit_ui_public_url: str = Field(default="http://localhost/mailpit", alias="MAILPIT_UI_PUBLIC_URL")
+    mailpit_api_url: str = Field(
+        default="http://mailpit:8025/mailpit/api/v1/messages",
+        alias="MAILPIT_API_URL",
+    )
+    mailpit_reseed_interval_seconds: int = Field(default=10, alias="MAILPIT_RESEED_INTERVAL_SECONDS", ge=5, le=3600)
     # INTENTIONAL CHALLENGE VULNERABILITY: these credentials are intentionally weak
     # and are exposed by the TRACE diagnostics endpoint when enabled.
     mailpit_basic_user: str = Field(default="", alias="MAILPIT_BASIC_USER")

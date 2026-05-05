@@ -95,6 +95,8 @@ services:
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_FROM: ${SMTP_FROM:-HyperVaults Dev <no-reply@hypervaults.local>}
       MAILPIT_UI_PUBLIC_URL: ${MAILPIT_UI_PUBLIC_URL:-http://localhost:8080/mailpit/}
+      MAILPIT_API_URL: ${MAILPIT_API_URL:-http://mailpit:8025/mailpit/api/v1/messages}
+      MAILPIT_RESEED_INTERVAL_SECONDS: ${MAILPIT_RESEED_INTERVAL_SECONDS:-10}
       # INTENTIONAL CHALLENGE VULNERABILITY: credentials are intentionally weak and
       # are leaked by TRACE /api/diagnostics/mail when the challenge is enabled.
       MAILPIT_BASIC_USER: ${MAILPIT_BASIC_USER:-devmail}
