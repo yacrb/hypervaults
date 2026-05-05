@@ -121,13 +121,22 @@ def _mailpit_subjects() -> set[str] | None:
         response = httpx.get(settings.mailpit_api_url, params={"limit": 1000}, timeout=3.0)
         response.raise_for_status()
         payload = response.json()
-    except (httpx.HTTPError, ValueError) as exc:
+    except Exception as exc:
         logger.warning("Failed to query Mailpit messages for reseed check: %s", exc)
         return None
 
-    messages = payload.get("messages") or payload.get("Messages") or []
+    if isinstance(payload, dict):
+        messages = payload.get("messages") or payload.get("Messages") or []
+    elif isinstance(payload, list):
+        messages = payload
+    else:
+        logger.warning("Unexpected Mailpit message payload type: %s", type(payload).__name__)
+        return None
+
     subjects: set[str] = set()
     for message in messages:
+        if not isinstance(message, dict):
+            continue
         subject = message.get("Subject") or message.get("subject")
         if isinstance(subject, str):
             subjects.add(subject)

@@ -3,7 +3,11 @@
 # /etc/caddy/Caddyfile on the droplet.
 
 hypervaults.io {
-  reverse_proxy 127.0.0.1:8080
+  reverse_proxy 127.0.0.1:8080 {
+    # Intentional workshop behavior: preserve player-supplied X-Forwarded-For
+    # so the docs bypass challenge works through the TLS edge.
+    header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+  }
 }
 
 www.hypervaults.io {
