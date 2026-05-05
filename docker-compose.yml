@@ -1,6 +1,7 @@
 services:
   nginx:
-    image: nginx:1.29-alpine
+    build:
+      context: ./nginx
     # Inline entrypoint: write the Mailpit htpasswd entry then start nginx.
     # Done inline to avoid CRLF line-ending issues with mounted shell scripts on Windows.
     # The secure config never references the htpasswd file; only the challenge config does.
@@ -9,7 +10,14 @@ services:
       - -c
       - >-
         mkdir -p /etc/nginx/auth &&
-        printf 'devmail:{SHA}G5mTZuWlOhreEhNXaqzsthmcwrg=\n' > /etc/nginx/auth/mailpit.htpasswd &&
+        MAILPIT_BASIC_USER_VALUE="$${MAILPIT_BASIC_USER:-}" &&
+        MAILPIT_BASIC_PASSWORD_VALUE="$${MAILPIT_BASIC_PASSWORD:-}" &&
+        [ -s /run/secrets/mailpit_basic_user ] && MAILPIT_BASIC_USER_VALUE="$$(cat /run/secrets/mailpit_basic_user)" &&
+        [ -s /run/secrets/mailpit_basic_password ] && MAILPIT_BASIC_PASSWORD_VALUE="$$(cat /run/secrets/mailpit_basic_password)" &&
+        [ -n "$$MAILPIT_BASIC_USER_VALUE" ] &&
+        [ -n "$$MAILPIT_BASIC_PASSWORD_VALUE" ] &&
+        HASH="$$(openssl passwd -apr1 "$$MAILPIT_BASIC_PASSWORD_VALUE")" &&
+        printf '%s:%s\n' "$$MAILPIT_BASIC_USER_VALUE" "$$HASH" > /etc/nginx/auth/mailpit.htpasswd &&
         exec nginx -g 'daemon off;'
     depends_on:
       backend:
@@ -22,6 +30,9 @@ services:
       - "127.0.0.1:80:80"
     volumes:
       - ${NGINX_CONFIG_FILE:-./nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
+    secrets:
+      - mailpit_basic_user
+      - mailpit_basic_password
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/api/health >/dev/null || exit 1"]
       interval: 15s
@@ -75,14 +86,24 @@ services:
       MAILPIT_UI_PUBLIC_URL: ${MAILPIT_UI_PUBLIC_URL:-http://localhost/mailpit}
       # INTENTIONAL CHALLENGE VULNERABILITY: credentials are intentionally weak and
       # are leaked by TRACE /api/diagnostics/mail when the challenge is enabled.
-      MAILPIT_BASIC_USER: ${MAILPIT_BASIC_USER:-devmail}
-      MAILPIT_BASIC_PASSWORD: ${MAILPIT_BASIC_PASSWORD:-devmail2026}
+      MAILPIT_BASIC_USER: ${MAILPIT_BASIC_USER:-}
+      MAILPIT_BASIC_PASSWORD: ${MAILPIT_BASIC_PASSWORD:-}
+      HARBOR_ADMIN_USER: ${HARBOR_ADMIN_USER:-}
+      HARBOR_ADMIN_PASSWORD: ${HARBOR_ADMIN_PASSWORD:-}
+      FLAG_DOCS_BYPASS: ${FLAG_DOCS_BYPASS:-}
+      FLAG_TRACE_MAIL: ${FLAG_TRACE_MAIL:-}
+      FLAG_MAILPIT_INBOX: ${FLAG_MAILPIT_INBOX:-}
+      FLAG_MINIO_PUBLIC_BUCKET: ${FLAG_MINIO_PUBLIC_BUCKET:-}
+      FLAG_HARBOR_DEBUG_IMAGE: ${FLAG_HARBOR_DEBUG_IMAGE:-}
       # Third challenge branch flags
       # INTENTIONAL CHALLENGE VULNERABILITY: when enabled, download responses include
       # a direct public object URL pointing at the unauthenticated /objects/ gateway.
       ENABLE_PUBLIC_MINIO_BUCKET: ${ENABLE_PUBLIC_MINIO_BUCKET:-false}
       ENABLE_OBJECTS_GATEWAY: ${ENABLE_OBJECTS_GATEWAY:-false}
       OBJECTS_PUBLIC_BASE_URL: ${OBJECTS_PUBLIC_BASE_URL:-http://localhost/objects}
+      ENABLE_HARBOR_REGISTRY: ${ENABLE_HARBOR_REGISTRY:-false}
+      ENABLE_HARBOR_DEFAULT_CREDS_BRANCH: ${ENABLE_HARBOR_DEFAULT_CREDS_BRANCH:-false}
+      HARBOR_HOST: ${HARBOR_HOST:-registry.hypervaults.local}
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,6 +113,16 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+    secrets:
+      - flag_docs_bypass
+      - flag_trace_mail
+      - flag_mailpit_inbox
+      - flag_minio_public_bucket
+      - flag_harbor_debug_image
+      - mailpit_basic_user
+      - mailpit_basic_password
+      - harbor_admin_user
+      - harbor_admin_password
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()\""]
       interval: 15s
@@ -147,8 +178,11 @@ services:
       # INTENTIONAL CHALLENGE VULNERABILITY (third branch): when true, the bucket
       # policy is set to public read+list and challenge seed files are uploaded.
       ENABLE_PUBLIC_MINIO_BUCKET: ${ENABLE_PUBLIC_MINIO_BUCKET:-false}
+      FLAG_MINIO_PUBLIC_BUCKET: ${FLAG_MINIO_PUBLIC_BUCKET:-}
     volumes:
       - ./minio/init/create-bucket.sh:/init/create-bucket.sh:ro
+    secrets:
+      - flag_minio_public_bucket
     entrypoint: ["/bin/sh", "/init/create-bucket.sh"]
     restart: "no"
 
@@ -177,3 +211,23 @@ services:
 volumes:
   postgres-18-data:
   minio-data:
+
+secrets:
+  flag_docs_bypass:
+    file: ${SECRETS_DIR:-./secrets.example}/flag_docs_bypass.txt
+  flag_trace_mail:
+    file: ${SECRETS_DIR:-./secrets.example}/flag_trace_mail.txt
+  flag_mailpit_inbox:
+    file: ${SECRETS_DIR:-./secrets.example}/flag_mailpit_inbox.txt
+  flag_minio_public_bucket:
+    file: ${SECRETS_DIR:-./secrets.example}/flag_minio_public_bucket.txt
+  flag_harbor_debug_image:
+    file: ${SECRETS_DIR:-./secrets.example}/flag_harbor_debug_image.txt
+  mailpit_basic_user:
+    file: ${SECRETS_DIR:-./secrets.example}/mailpit_basic_user.txt
+  mailpit_basic_password:
+    file: ${SECRETS_DIR:-./secrets.example}/mailpit_basic_password.txt
+  harbor_admin_user:
+    file: ${SECRETS_DIR:-./secrets.example}/harbor_admin_user.txt
+  harbor_admin_password:
+    file: ${SECRETS_DIR:-./secrets.example}/harbor_admin_password.txt

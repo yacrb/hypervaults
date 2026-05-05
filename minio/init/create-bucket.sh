@@ -7,6 +7,24 @@ set -eu
 
 ENABLE_PUBLIC_MINIO_BUCKET="${ENABLE_PUBLIC_MINIO_BUCKET:-false}"
 
+read_secret_or_env() {
+  secret_name="$1"
+  env_name="$2"
+  default_value="$3"
+  secret_path="/run/secrets/$secret_name"
+  if [ -s "$secret_path" ]; then
+    IFS= read -r secret_value < "$secret_path" || true
+    printf '%s' "$secret_value"
+  else
+    eval "env_value=\${$env_name:-}"
+    if [ -n "$env_value" ]; then
+      printf '%s' "$env_value"
+    else
+      printf '%s' "$default_value"
+    fi
+  fi
+}
+
 mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 
 if mc ls "local/$MINIO_BUCKET" >/dev/null 2>&1; then
@@ -16,6 +34,12 @@ else
 fi
 
 if [ "$ENABLE_PUBLIC_MINIO_BUCKET" = "true" ]; then
+  FLAG_MINIO_PUBLIC_BUCKET_VALUE="$(read_secret_or_env flag_minio_public_bucket FLAG_MINIO_PUBLIC_BUCKET '')"
+  if [ -z "$FLAG_MINIO_PUBLIC_BUCKET_VALUE" ]; then
+    echo "FLAG_MINIO_PUBLIC_BUCKET or /run/secrets/flag_minio_public_bucket is required in public bucket challenge mode" >&2
+    exit 1
+  fi
+
   # INTENTIONAL CHALLENGE VULNERABILITY (third branch — OWASP A02):
   # Bucket is set to public read+list, making every uploaded user file
   # accessible to anyone who knows (or discovers) the object key.
@@ -25,16 +49,28 @@ if [ "$ENABLE_PUBLIC_MINIO_BUCKET" = "true" ]; then
   mc anonymous set public "local/$MINIO_BUCKET"
 
   # Seed the flag at the bucket root so players find it while browsing.
-  printf 'flag{public_buckets_make_private_uploads_public}\n' \
+  printf '%s\n' "$FLAG_MINIO_PUBLIC_BUCKET_VALUE" \
     | mc pipe "local/$MINIO_BUCKET/flag.txt"
 
   # Seed a hint file that explains how the bucket was exposed.
   printf 'This bucket was temporarily opened during a migration sprint and never locked down again.\n' \
     | mc pipe "local/$MINIO_BUCKET/support/old-export-note.txt"
 
-  # Seed a realistic-looking user file to make the listing look credible.
+  # Seed a small, fake object set to make the listing look credible.
   printf 'Welcome to HyperVaults. Your files are stored in our private vault.\n' \
     | mc pipe "local/$MINIO_BUCKET/users/1/welcome.txt"
+  printf 'Onboarding checklist\n- create staging user\n- verify upload limits\n- confirm object policies\n' \
+    | mc pipe "local/$MINIO_BUCKET/users/1/onboarding-checklist.txt"
+  printf 'Invoice sample for staging upload/download validation. No customer data.\n' \
+    | mc pipe "local/$MINIO_BUCKET/users/2/invoice-sample.txt"
+  printf 'Q2 security review draft\n\nCheck proxy headers, mail diagnostics, and object storage policy before launch.\n' \
+    | mc pipe "local/$MINIO_BUCKET/users/3/q2-security-review-draft.txt"
+  printf 'Support export note: old staging export retained for migration validation only.\n' \
+    | mc pipe "local/$MINIO_BUCKET/support/support-export-note.txt"
+  printf 'Migration note: verify bucket policy after gateway testing.\n' \
+    | mc pipe "local/$MINIO_BUCKET/migration/readme.txt"
+  printf 'Migration README\n\nTemporary public gateway testing must be reverted before release.\n' \
+    | mc pipe "local/$MINIO_BUCKET/migration/migration-readme.txt"
 
   echo "Challenge files seeded into $MINIO_BUCKET"
 else

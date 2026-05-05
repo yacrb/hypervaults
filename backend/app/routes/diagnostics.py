@@ -9,14 +9,15 @@ Expected player path:
   1. Use X-Forwarded-For: 127.0.0.1 to access /api/docs (first vuln)
   2. Notice TRACE /api/diagnostics/mail in the OpenAPI schema
   3. curl -X TRACE http://localhost/api/diagnostics/mail -H "X-Forwarded-For: 127.0.0.1"
-  4. Receive Mailpit credentials and flag{trace_mail_diagnostics_exposed}
-  5. Visit http://localhost/mailpit, login with devmail/devmail2026
-  6. Read seeded email with flag{dev_mailboxes_do_not_belong_in_prod}
+  4. Receive Mailpit credentials and the TRACE mail flag
+  5. Visit http://localhost/mailpit with the leaked credentials
+  6. Read the seeded Mailpit flag email
 """
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from app.challenge_config import get_challenge_config
 from app.config import get_settings
 
 settings = get_settings()
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/api", tags=["internal-diagnostics"])
     response_class=JSONResponse,
 )
 def trace_mail_diagnostics() -> dict:
+    challenge_config = get_challenge_config()
     return {
         "service": "hypervaults-api",
         "component": "mail",
@@ -46,13 +48,13 @@ def trace_mail_diagnostics() -> dict:
         "mail_ui": settings.mailpit_ui_public_url,
         "mail_ui_auth": {
             "type": "basic",
-            "username": settings.mailpit_basic_user,
-            "password": settings.mailpit_basic_password,
+            "username": challenge_config.mailpit_basic_user,
+            "password": challenge_config.mailpit_basic_password,
         },
         "dev_account": {
             "email": "dev@hypervaults.local",
             "note": "Temporary dev mailbox account used during staging tests",
         },
         "note": "Mail diagnostics should never expose development infrastructure or credentials.",
-        "flag": "flag{trace_mail_diagnostics_exposed}",
+        "flag": challenge_config.trace_mail_flag,
     }

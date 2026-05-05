@@ -2,13 +2,13 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 
+from app.challenge_config import get_challenge_config
 from app.config import get_settings
 
 
 settings = get_settings()
 
 LOCALHOST_VALUES = {"127.0.0.1", "::1", "localhost"}
-DOCS_BYPASS_FLAG = "flag{trusted_proxy_headers_are_not_user_input}"
 
 
 def is_request_from_localhost(request: Request) -> bool:
@@ -38,7 +38,7 @@ def require_localhost_docs_access(request: Request) -> None:
 
 def openapi_description() -> str:
     if settings.challenge_mode or settings.enable_x_forwarded_docs_bypass:
-        return f"Internal documentation. Access should be restricted to localhost. {DOCS_BYPASS_FLAG}"
+        return f"Internal documentation. Access should be restricted to localhost. {get_challenge_config().docs_bypass_flag}"
     return "Secure document vault API. Interactive documentation is restricted to localhost/internal access."
 
 

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     enable_harbor_registry: bool = Field(default=False, alias="ENABLE_HARBOR_REGISTRY")
     enable_harbor_default_creds_branch: bool = Field(default=False, alias="ENABLE_HARBOR_DEFAULT_CREDS_BRANCH")
     harbor_host: str = Field(default="registry.hypervaults.local", alias="HARBOR_HOST")
+    harbor_admin_user: str = Field(default="", alias="HARBOR_ADMIN_USER")
+    harbor_admin_password: str = Field(default="", alias="HARBOR_ADMIN_PASSWORD")
 
     # Third challenge branch: public MinIO bucket + unauthenticated object gateway.
     # ENABLE_PUBLIC_MINIO_BUCKET is a documentation flag here — the bucket policy
@@ -59,11 +61,14 @@ class Settings(BaseSettings):
     mailpit_ui_public_url: str = Field(default="http://localhost/mailpit", alias="MAILPIT_UI_PUBLIC_URL")
     # INTENTIONAL CHALLENGE VULNERABILITY: these credentials are intentionally weak
     # and are exposed by the TRACE diagnostics endpoint when enabled.
-    mailpit_basic_user: str = Field(default="devmail", alias="MAILPIT_BASIC_USER")
-    mailpit_basic_password: str = Field(default="devmail2026", alias="MAILPIT_BASIC_PASSWORD")
+    mailpit_basic_user: str = Field(default="", alias="MAILPIT_BASIC_USER")
+    mailpit_basic_password: str = Field(default="", alias="MAILPIT_BASIC_PASSWORD")
 
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, alias="MAX_UPLOAD_BYTES", ge=1, le=25 * 1024 * 1024)
-    cors_allowed_origins: list[str] = ["http://localhost", "http://localhost:3000"]
+    cors_allowed_origins: list[str] = Field(
+        default=["http://localhost", "http://localhost:3000"],
+        alias="CORS_ALLOWED_ORIGINS",
+    )
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

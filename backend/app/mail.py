@@ -14,43 +14,53 @@ import smtplib
 import logging
 from email.mime.text import MIMEText
 
+from app.challenge_config import get_challenge_config
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# ----- Second branch: TRACE mail diagnostics -----
-_TRACE_SEED_EMAILS = [
-    (
-        "test.user@hypervaults.local",
-        "Welcome to HyperVaults",
-        (
-            "Welcome to HyperVaults.\n\n"
-            "This is a staging mailbox test used by the HyperVaults team.\n"
-        ),
-    ),
-    (
-        "support@hypervaults.local",
-        "HyperVaults Mail Diagnostic",
-        (
-            "The development mailbox was reachable through the edge proxy.\n\n"
-            "flag{dev_mailboxes_do_not_belong_in_prod}\n"
-        ),
-    ),
-    (
-        "dev@hypervaults.local",
-        "Staging dev account",
-        (
-            "Temporary dev account for QA:\n\n"
-            "Email: dev@hypervaults.local\n"
-            "Password: DevVaults2026!\n\n"
-            "Reminder: remove this before production.\n"
-        ),
-    ),
-]
-
 # In-memory guard so seed emails are sent only once per process lifetime.
 # Duplicates can still appear after a container restart — noted in README.
 _seed_done: bool = False
+
+
+def _trace_seed_emails(mailpit_inbox_flag: str) -> list[tuple[str, str, str]]:
+    return [
+        (
+            "test.user@hypervaults.local",
+            "Welcome to HyperVaults staging",
+            (
+                "Welcome to the HyperVaults staging environment.\n\n"
+                "This mailbox confirms local SMTP capture is working for QA sign-up tests.\n"
+            ),
+        ),
+        (
+            "qa@hypervaults.local",
+            "Password reset test for QA",
+            (
+                "A password reset template test was triggered for qa@hypervaults.local.\n\n"
+                "No real reset token is included in this staging message.\n"
+            ),
+        ),
+        (
+            "support@hypervaults.local",
+            "Mail diagnostic warning",
+            (
+                "The development mailbox was reachable through the edge proxy during staging validation.\n\n"
+                f"{mailpit_inbox_flag}\n"
+            ),
+        ),
+        (
+            "dev@hypervaults.local",
+            "Reminder to remove debug services before launch",
+            (
+                "Reminder for the release checklist:\n\n"
+                "- remove exposed mail diagnostics\n"
+                "- disable public object gateway\n"
+                "- rotate all staging-only credentials\n"
+            ),
+        ),
+    ]
 
 
 def send_email(to: str, subject: str, body: str) -> None:
@@ -86,10 +96,11 @@ def seed_challenge_emails() -> None:
     _seed_done = True
 
     settings = get_settings()
+    challenge_config = get_challenge_config()
 
     # Second branch: TRACE mail diagnostics + exposed Mailpit
     if settings.enable_trace_mail_diagnostics:
-        for to, subject, body in _TRACE_SEED_EMAILS:
+        for to, subject, body in _trace_seed_emails(challenge_config.mailpit_inbox_flag):
             _try_send(to, subject, body)
 
     # Fourth branch: Harbor registry default credentials
@@ -99,7 +110,7 @@ def seed_challenge_emails() -> None:
             "Harbor staging registry is online.\n\n"
             f"URL:\n{harbor_url}\n\n"
             "Bootstrap admin:\n"
-            "admin / Harbor12345\n\n"
+            f"{challenge_config.harbor_admin_user} / {challenge_config.harbor_admin_password}\n\n"
             "TODO before production:\n"
             "- rotate the default Harbor admin password\n"
             "- remove staging-debug image\n"

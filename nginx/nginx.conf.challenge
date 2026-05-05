@@ -32,6 +32,7 @@ http {
         add_header X-Frame-Options "DENY" always;
         add_header Referrer-Policy "no-referrer" always;
         add_header Permissions-Policy "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=()" always;
+        error_page 405 = @trace_mail_diagnostics;
 
         # INTENTIONAL CHALLENGE VULNERABILITY (second branch):
         # TRACE is NOT blocked globally in challenge mode. TRACE requests reach
@@ -77,6 +78,25 @@ http {
         # The spoofed X-Forwarded-For header is preserved here so players can chain
         # the first vulnerability (docs bypass) with the second (TRACE diagnostics).
         location = /api/diagnostics/mail {
+            error_page 405 = @trace_mail_diagnostics;
+            proxy_pass http://backend_app;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Nginx rejects TRACE itself with 405. This internal location is scoped to
+        # the single diagnostics endpoint so challenge mode can demonstrate the
+        # intentionally unsafe backend TRACE handler without enabling TRACE broadly.
+        location @trace_mail_diagnostics {
+            if ($request_uri != "/api/diagnostics/mail") {
+                return 405;
+            }
+
+            proxy_method TRACE;
             proxy_pass http://backend_app;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
@@ -99,7 +119,7 @@ http {
 
         # INTENTIONAL CHALLENGE VULNERABILITY (second branch):
         # Mailpit web UI exposed at /mailpit/ with intentionally weak Basic Auth.
-        # Credentials (devmail / devmail2026) are leaked by TRACE /api/diagnostics/mail.
+        # Credentials are generated from Docker secrets and leaked by TRACE /api/diagnostics/mail.
         # The htpasswd file is generated at container startup by nginx/entrypoint.sh.
         location /mailpit/ {
             auth_basic "Mail Diagnostics";
@@ -187,7 +207,7 @@ http {
         client_max_body_size 500m;
 
         # INTENTIONAL CHALLENGE VULNERABILITY: Harbor is proxied without
-        # additional authentication. The default admin/Harbor12345 credentials
+        # additional authentication. The intentionally weak training credentials
         # are the vulnerability — players discover them via the Mailpit email.
         location / {
             proxy_pass http://harbor_proxy;
